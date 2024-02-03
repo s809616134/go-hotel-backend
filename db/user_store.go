@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/s809616134/hotel-backend/types"
 	"go.mongodb.org/mongo-driver/bson"
@@ -11,12 +12,20 @@ import (
 
 const userColl = "users"
 
+type Dropper interface {
+	Drop(context.Context) error
+}
+
 type UserStore interface {
+	Dropper
+
+	GetUserByEmail(context.Context, string) (*types.User, error)
 	GetUserByID(context.Context, string) (*types.User, error)
 	GetUsers(context.Context) ([]*types.User, error)
 	InsertUser(context.Context, *types.User) (*types.User, error)
 	DeleteUser(context.Context, string) error
 	UpdateUser(cx context.Context, filter bson.M, params types.UpdateUserParams) error
+	Drop(context.Context) error
 }
 
 type MongoUserStore struct {
@@ -29,6 +38,11 @@ func NewMongoUserStore(client *mongo.Client) *MongoUserStore {
 		client: client,
 		coll:   client.Database(DBNAME).Collection(userColl),
 	}
+}
+
+func (s *MongoUserStore) Drop(ctx context.Context) error {
+	fmt.Println("--- dropping user collection")
+	return s.coll.Drop(ctx)
 }
 
 // TODO: handel if do not update user
@@ -80,6 +94,14 @@ func (s *MongoUserStore) GetUsers(ctx context.Context) ([]*types.User, error) {
 	}
 
 	return users, nil
+}
+
+func (s *MongoUserStore) GetUserByEmail(ctx context.Context, email string) (*types.User, error) {
+	var user types.User
+	if err := s.coll.FindOne(ctx, bson.M{"email": email}).Decode(&user); err != nil {
+		return nil, err
+	}
+	return &user, nil
 }
 
 func (s *MongoUserStore) GetUserByID(ctx context.Context, id string) (*types.User, error) {
